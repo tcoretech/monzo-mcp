@@ -32,14 +32,7 @@ logging.basicConfig(
     stream=sys.stderr,
 )
 
-mcp = FastMCP(
-    "Monzo",
-    description=(
-        "Read-only Monzo banking tools: balances, transactions, pots, "
-        "and spending analysis. Requires MONZO_CLIENT_ID and "
-        "MONZO_CLIENT_SECRET env vars."
-    ),
-)
+mcp = FastMCP("Monzo")
 
 # Lazy init — only create client when tools are actually called
 _client: MonzoClient | None = None
