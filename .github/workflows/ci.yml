@@ -1,0 +1,42 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version: ["3.10", "3.12", "3.13"]
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install build tools
+        run: pip install build
+
+      - name: Build package
+        run: python -m build
+
+      - name: Install package
+        run: pip install dist/*.whl
+
+      - name: Verify imports
+        run: |
+          python -c "from monzo_mcp.auth import TokenManager; print('auth OK')"
+          python -c "from monzo_mcp.monzo_client import MonzoClient; print('client OK')"
+          python -c "from monzo_mcp.tools import register_tools; print('tools OK')"
+          python -c "from monzo_mcp.server import mcp; print('server OK')"
+
+      - name: Verify entry points
+        run: |
+          which monzo-mcp
+          which monzo-mcp-auth
