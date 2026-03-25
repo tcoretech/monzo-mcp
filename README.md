@@ -30,10 +30,13 @@ Read-only Monzo banking integration for Claude Code. Query balances, view transa
 ### Option 1: uvx (recommended — no clone needed)
 
 ```bash
-claude mcp add monzo -- uvx --from monzo-mcp monzo-mcp
+claude mcp add monzo \
+  -e MONZO_CLIENT_ID=your_client_id \
+  -e MONZO_CLIENT_SECRET=your_client_secret \
+  -- uvx --from monzo-mcp monzo-mcp
 ```
 
-Claude Code will prompt you for `MONZO_CLIENT_ID` and `MONZO_CLIENT_SECRET`.
+Replace `your_client_id` and `your_client_secret` with the values from [developers.monzo.com](https://developers.monzo.com/).
 
 On first use, the server opens your browser to log in to Monzo. Tokens are stored internally — you never touch them.
 
@@ -53,7 +56,10 @@ pip install monzo-mcp
 Then register in Claude Code:
 
 ```bash
-claude mcp add monzo -- monzo-mcp
+claude mcp add monzo \
+  -e MONZO_CLIENT_ID=your_client_id \
+  -e MONZO_CLIENT_SECRET=your_client_secret \
+  -- monzo-mcp
 ```
 
 ### Option 4: Clone
@@ -62,7 +68,10 @@ claude mcp add monzo -- monzo-mcp
 git clone https://github.com/tcoretech/monzo-mcp.git
 cd monzo-mcp
 pip install -e .
-claude mcp add monzo -- python mcp-server/server.py
+claude mcp add monzo \
+  -e MONZO_CLIENT_ID=your_client_id \
+  -e MONZO_CLIENT_SECRET=your_client_secret \
+  -- python mcp-server/server.py
 ```
 
 ---
