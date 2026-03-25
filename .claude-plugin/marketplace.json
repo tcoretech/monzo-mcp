@@ -1,0 +1,18 @@
+{
+  "$schema": "https://anthropic.com/claude-code/marketplace.schema.json",
+  "name": "tcoretech",
+  "description": "tcoretech Claude Code plugins — banking integrations and productivity tools",
+  "owner": {
+    "name": "tcoretech",
+    "email": "support@tcoretech.com"
+  },
+  "plugins": [
+    {
+      "name": "monzo",
+      "description": "Read-only Monzo banking tools — balances, transactions, pots, and spending analysis via MCP server",
+      "category": "finance",
+      "source": ".",
+      "homepage": "https://github.com/tcoretech/monzo-mcp"
+    }
+  ]
+}

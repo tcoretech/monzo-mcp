@@ -1,0 +1,25 @@
+{
+  "name": "monzo",
+  "version": "1.0.0",
+  "description": "Read-only Monzo banking integration — balances, transactions, pots, and spending analysis via MCP server",
+  "author": {
+    "name": "tcoretech",
+    "url": "https://github.com/tcoretech"
+  },
+  "license": "MIT",
+  "homepage": "https://github.com/tcoretech/monzo-mcp",
+  "category": "finance",
+  "keywords": ["monzo", "banking", "finance", "mcp", "spending"],
+  "mcp": {
+    "server": "mcp-server/server.py",
+    "command": "python",
+    "transport": "stdio"
+  },
+  "skills": [
+    "skills/monzo/SKILL.md"
+  ],
+  "requires": {
+    "python": ">=3.10",
+    "env": ["MONZO_CLIENT_ID", "MONZO_CLIENT_SECRET"]
+  }
+}
