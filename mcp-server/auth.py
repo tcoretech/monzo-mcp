@@ -70,6 +70,58 @@ def _open_browser(url: str) -> None:
     except Exception as e:
         logger.warning("Failed to open browser: %s", e)
 
+_SUCCESS_PAGE = b"""<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>Monzo MCP</title><style>
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:system-ui,-apple-system,sans-serif;min-height:100vh;
+display:flex;align-items:center;justify-content:center;background:#0f0f0f;color:#e8e8e8}
+.card{background:#1a1a1a;border:1px solid #2a2a2a;border-radius:16px;padding:48px;
+max-width:440px;text-align:center}
+.check{width:64px;height:64px;margin:0 auto 24px;border-radius:50%;
+background:#00d4aa20;display:flex;align-items:center;justify-content:center}
+.check svg{width:32px;height:32px;color:#00d4aa}
+h1{font-size:20px;font-weight:600;margin-bottom:8px}
+.sub{color:#888;font-size:14px;margin-bottom:32px}
+.sca{background:#1e1e2e;border:1px solid #333;border-radius:12px;padding:20px;text-align:left}
+.sca-title{font-size:13px;font-weight:600;color:#f0c040;margin-bottom:8px;
+display:flex;align-items:center;gap:8px}
+.sca-body{font-size:13px;color:#aaa;line-height:1.5}
+.sca-body strong{color:#e8e8e8}
+</style></head><body><div class="card">
+<div class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+<polyline points="20 6 9 17 4 12"/></svg></div>
+<h1>Connected to Monzo</h1>
+<p class="sub">You can close this tab and return to Claude.</p>
+<div class="sca"><div class="sca-title">\xf0\x9f\x94\x90 Check your phone</div>
+<div class="sca-body">Open the <strong>Monzo app</strong> and tap
+<strong>Approve</strong> on the push notification to complete
+Strong Customer Authentication (SCA). Until you approve,
+some API calls may be restricted.</div></div>
+</div></body></html>"""
+
+
+def _error_page(error: str) -> bytes:
+    safe_error = error.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+    return f"""<!DOCTYPE html><html><head><meta charset="utf-8">
+<title>Monzo MCP</title><style>
+*{{margin:0;padding:0;box-sizing:border-box}}
+body{{font-family:system-ui,-apple-system,sans-serif;min-height:100vh;
+display:flex;align-items:center;justify-content:center;background:#0f0f0f;color:#e8e8e8}}
+.card{{background:#1a1a1a;border:1px solid #2a2a2a;border-radius:16px;padding:48px;
+max-width:440px;text-align:center}}
+.icon{{font-size:48px;margin-bottom:24px}}
+h1{{font-size:20px;font-weight:600;margin-bottom:12px;color:#ff6b6b}}
+.detail{{color:#888;font-size:13px;background:#111;border-radius:8px;
+padding:12px;margin-top:16px;word-break:break-all;text-align:left}}
+</style></head><body><div class="card">
+<div class="icon">\xe2\x9a\xa0\xef\xb8\x8f</div>
+<h1>Authentication Failed</h1>
+<p style="color:#aaa;font-size:14px">Something went wrong during the Monzo login.</p>
+<div class="detail">{safe_error}</div>
+</div></body></html>""".encode("utf-8")
+
+
 def trigger_background_auth_flow(token_manager: "TokenManager") -> str:
     global _loopback_running, _loopback_server
     
@@ -92,14 +144,13 @@ def trigger_background_auth_flow(token_manager: "TokenManager") -> str:
             self.send_response(200)
             self.send_header("Content-type", "text/html")
             self.end_headers()
-            
+
             try:
-                # Construct full URL for exchange
                 full_path = f"http://localhost:{port}{self.path}"
                 token_manager.exchange_from_callback_url(full_path)
-                self.wfile.write(b"<html><body><h1>Authentication successful!</h1><p>You can close this tab and return to the chat.</p></body></html>")
+                self.wfile.write(_SUCCESS_PAGE)
             except Exception as e:
-                self.wfile.write(f"<html><body><h1>Authentication failed</h1><p>{e}</p></body></html>".encode("utf-8"))
+                self.wfile.write(_error_page(str(e)))
             
             # Stop the server after a short delay
             def shutdown_server():
