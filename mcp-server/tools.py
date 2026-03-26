@@ -313,11 +313,11 @@ def _format_transaction(t: dict[str, Any], verbose: bool = False) -> dict[str, A
         "merchant": _get_merchant_name(t),
         "created": t.get("created", ""),
         "notes": t.get("notes", ""),
+        "decline_reason": t.get("decline_reason", ""),
     }
 
     if verbose:
         result["metadata"] = t.get("metadata", {})
-        result["decline_reason"] = t.get("decline_reason", "")
 
     result["_note"] = "Amount in minor units (pence). Negative = debit, positive = credit."
     return result
