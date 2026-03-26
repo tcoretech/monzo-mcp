@@ -7,12 +7,13 @@ Read-only Monzo banking integration for Claude Code. Query balances, view transa
 | Tool | Description |
 |------|-------------|
 | `monzo_is_authenticated` | Verify authentication status (live ping) |
+| `monzo_complete_auth` | Complete OAuth when loopback fails (WSL/Docker fallback) |
 | `monzo_list_accounts` | List all accounts (current, joint, flex) |
 | `monzo_get_balance` | Current balance and today's spending |
 | `monzo_list_transactions` | Transaction history with merchant details |
 | `monzo_get_transaction` | Full detail on a single transaction |
-| `monzo_list_pots` | All pots with balances and goals |
-| `monzo_spending_summary` | Aggregated spending by category and merchant |
+| `monzo_list_pots` | All active (non-deleted) pots with balances and goals |
+| `monzo_spending_summary` | Aggregated spending by category and top 10 merchants |
 
 ## Prerequisites
 
@@ -33,13 +34,7 @@ Go to [developers.monzo.com](https://developers.monzo.com/) and create a **Confi
 
 ### 2. Installation Options
 
-#### Option 1: Claude Code Plugin (Marketplace)
-```bash
-/plugin marketplace add tcoretech/monzo-mcp
-/plugin install monzo@tcoretech
-```
-
-#### Option 2: uvx (recommended — no clone needed)
+#### Option 1: uvx (recommended — no clone needed)
 ```bash
 claude mcp add monzo \
   -e MONZO_CLIENT_ID=your_client_id \
@@ -47,7 +42,7 @@ claude mcp add monzo \
   -- uvx --from monzo-mcp monzo-mcp
 ```
 
-#### Option 3: pip install
+#### Option 2: pip install
 ```bash
 pip install monzo-mcp
 claude mcp add monzo \
@@ -56,7 +51,7 @@ claude mcp add monzo \
   -- monzo-mcp
 ```
 
-#### Option 4: Clone & Run from Source
+#### Option 3: Clone & Run from Source
 ```bash
 git clone https://github.com/tcoretech/monzo-mcp.git
 cd monzo-mcp
@@ -80,8 +75,7 @@ For use with Claude Desktop or other MCP clients, add this to your configuration
       ],
       "env": {
         "MONZO_CLIENT_ID": "YOUR_CLIENT_ID",
-        "MONZO_CLIENT_SECRET": "YOUR_CLIENT_SECRET",
-        "MONZO_REDIRECT_URI": "http://localhost:3118/callback"
+        "MONZO_CLIENT_SECRET": "YOUR_CLIENT_SECRET"
       }
     }
   }
@@ -128,18 +122,20 @@ Once connected, ask Claude things like:
 
 ```text
 monzo-mcp/
-├── .claude-plugin/          # Plugin metadata for marketplace
+├── .claude-plugin/          # Plugin metadata
 │   ├── plugin.json
-│   └── marketplace.json
+│   ├── marketplace.json
+│   └── hooks/
+│       ├── hooks.json       # Session-start auth check hook
+│       └── check-monzo-auth.sh
 ├── mcp-server/              # MCP server (Python)
 │   ├── server.py            # FastMCP entry point (stdio)
-│   ├── tools.py             # 7 read-only tool definitions
+│   ├── tools.py             # 8 tool definitions (7 banking + 1 auth helper)
 │   ├── monzo_client.py      # Async API client with retry
 │   ├── auth.py              # OAuth token management, loopback listener, auto-refresh
 │   └── .env.example
 ├── skills/monzo/
-│   ├── SKILL.md             # Domain knowledge for Claude
-│   └── monzo-api-reference.md
+│   └── SKILL.md             # Domain knowledge for Claude
 ├── pyproject.toml           # Python packaging (pip/uvx)
 ├── LICENSE
 └── README.md
@@ -168,10 +164,21 @@ User provides                 Server handles internally
 
 ## Important Notes
 
-- **90-day limit:** Due to Monzo's Strong Customer Authentication (SCA), transaction history is limited to 90 days unless you re-authenticate within 5 minutes in the Monzo app.
+- **90-day limit:** Due to Monzo's Strong Customer Authentication (SCA), transaction history is limited to 90 days. After approving SCA in the Monzo app, full history is accessible for 5 minutes before reverting to the 90-day window.
 - **Personal use only:** The Monzo API is restricted to personal use — Monzo does not allow public applications.
 - **Rate limits:** Monzo enforces rate limits. The client handles retries automatically.
 - **Amounts:** All API amounts are in minor units (pence for GBP). Claude converts to pounds.
+
+## Changelog
+
+- **v1.0.7** — Security hardening (OAuth state nonce, bind 127.0.0.1, XSS escaping), code quality fixes, docs refresh
+- **v1.0.6** — Include `decline_reason` in list_transactions output
+- **v1.0.5** — Make MCP server client-agnostic
+- **v1.0.4** — Polished OAuth callback pages with SCA reminder
+- **v1.0.3** — Lazy account ID detection after SCA approval
+- **v1.0.2** — Add `monzo_complete_auth` tool for WSL/Docker callback fallback
+- **v1.0.1** — Bug fixes
+- **v1.0.0** — Initial release
 
 ## License
 

@@ -12,6 +12,7 @@ Read-only access to Monzo bank data via MCP server. Dual-layer: MCP tools handle
 | Tool | What it does |
 |------|-------------|
 | `monzo_is_authenticated` | Verify auth status (live ping to Monzo API) |
+| `monzo_complete_auth` | Complete OAuth manually when loopback fails (WSL/Docker) |
 | `monzo_list_accounts` | List all accounts (current, joint, flex) |
 | `monzo_get_balance` | Balance, total balance, and today's spending |
 | `monzo_list_transactions` | Recent transactions with merchant details |
@@ -43,4 +44,5 @@ When asked about spending:
 - The `since` parameter on transactions can be a timestamp OR a transaction ID
 - Pot transfers show as transactions but should be excluded from spending analysis (the `monzo_spending_summary` tool handles this)
 - Max 100 transactions per API call — `monzo_spending_summary` paginates automatically
-- Account ID defaults to the configured one; override with `account_id` param if querying joint/flex accounts
+- In WSL or Docker, the automatic OAuth loopback listener may not catch the callback. If `monzo_is_authenticated` returns `needs_login` after the user logged in via the browser, ask for the full callback URL from their browser address bar and pass it to `monzo_complete_auth`
+- Account ID defaults to the primary current account detected during authentication; override with `account_id` param if querying joint/flex accounts

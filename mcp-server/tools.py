@@ -7,7 +7,7 @@ that the LLM sees.
 
 from collections import defaultdict
 from datetime import datetime, timedelta, timezone
-from typing import Any, Callable
+from typing import Any, Awaitable, Callable
 
 from fastmcp import FastMCP
 
@@ -39,7 +39,7 @@ def register_tools(
             return client_or_factory()
         return client_or_factory  # type: ignore
 
-    async def _handle_api_call(coro):
+    async def _handle_api_call(coro: Awaitable[Any]) -> Any:
         try:
             return await coro
         except NeedsAuthError as e:
@@ -163,11 +163,12 @@ def register_tools(
         inform the user to approve the notification in their Monzo mobile app, 
         and wait for their confirmation.
         """
+        clamped_limit = max(1, min(limit, 100))
         res = await _handle_api_call(_client().list_transactions(
             account_id=account_id or None,
             since=since or None,
             before=before or None,
-            limit=limit,
+            limit=clamped_limit,
         ))
         if isinstance(res, list):
             return [_format_transaction(t) for t in res]
@@ -185,7 +186,7 @@ def register_tools(
         and wait for their confirmation.
         """
         res = await _handle_api_call(_client().get_transaction(transaction_id))
-        if isinstance(res, dict) and "status" not in res:
+        if isinstance(res, dict) and "id" in res:
             return _format_transaction(res, verbose=True)
         return res
 
@@ -263,7 +264,7 @@ def _build_summary(all_transactions: list[dict[str, Any]], days: int) -> dict[st
         t for t in all_transactions
         if t.get("amount", 0) < 0
         and not t.get("metadata", {}).get("pot_id")
-        and not t.get("scheme", "") == "uk_retail_pot"
+        and t.get("scheme", "") != "uk_retail_pot"
     ]
 
     by_category: dict[str, dict[str, Any]] = defaultdict(
@@ -285,6 +286,10 @@ def _build_summary(all_transactions: list[dict[str, Any]], days: int) -> dict[st
         by_merchant[merchant]["count"] += 1
 
     total_spent = sum(cat["total"] for cat in by_category.values())
+    currency = next(
+        (t.get("currency", "GBP") for t in spending if t.get("currency")),
+        "GBP",
+    )
     top_merchants = sorted(
         by_merchant.items(), key=lambda x: x[1]["total"], reverse=True
     )[:10]
@@ -292,7 +297,7 @@ def _build_summary(all_transactions: list[dict[str, Any]], days: int) -> dict[st
     return {
         "period": f"Last {days} days",
         "total_spent": total_spent,
-        "currency": "GBP",
+        "currency": currency,
         "by_category": dict(by_category),
         "top_merchants": [
             {"name": name, "total": data["total"], "count": data["count"]}

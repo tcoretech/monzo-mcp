@@ -6,9 +6,11 @@ All tokens (access, refresh) and account ID are obtained via OAuth
 and stored internally in ~/.monzo-mcp/tokens.json.
 """
 
+import html
 import json
 import logging
 import os
+import secrets
 import urllib.parse
 from pathlib import Path
 import threading
@@ -56,6 +58,18 @@ def _is_wsl() -> bool:
         pass
     return False
 
+
+def _is_remote_or_headless() -> bool:
+    """Detect environments where the loopback listener likely won't receive the callback."""
+    if os.environ.get("SSH_CLIENT") or os.environ.get("SSH_CONNECTION"):
+        return True
+    if os.path.exists("/.dockerenv"):
+        return True
+    if not os.environ.get("DISPLAY") and not os.environ.get("WAYLAND_DISPLAY"):
+        if os.name != "nt":  # Not Windows
+            return True
+    return _is_wsl()
+
 def _open_browser(url: str) -> None:
     if _is_wsl():
         try:
@@ -70,7 +84,7 @@ def _open_browser(url: str) -> None:
     except Exception as e:
         logger.warning("Failed to open browser: %s", e)
 
-_SUCCESS_PAGE = b"""<!DOCTYPE html><html><head><meta charset="utf-8">
+_SUCCESS_PAGE = b"""<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
 <title>Monzo MCP</title><style>
 *{margin:0;padding:0;box-sizing:border-box}
 body{font-family:system-ui,-apple-system,sans-serif;min-height:100vh;
@@ -88,8 +102,8 @@ display:flex;align-items:center;gap:8px}
 .sca-body{font-size:13px;color:#aaa;line-height:1.5}
 .sca-body strong{color:#e8e8e8}
 </style></head><body><div class="card">
-<div class="check"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
-stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
+<div class="check" role="img" aria-label="Success"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor"
+stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
 <polyline points="20 6 9 17 4 12"/></svg></div>
 <h1>Connected to Monzo</h1>
 <p class="sub">You can close this tab and return to your chat.</p>
@@ -102,8 +116,8 @@ some API calls may be restricted.</div></div>
 
 
 def _error_page(error: str) -> bytes:
-    safe_error = error.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
-    return f"""<!DOCTYPE html><html><head><meta charset="utf-8">
+    safe_error = html.escape(error)
+    return f"""<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">
 <title>Monzo MCP</title><style>
 *{{margin:0;padding:0;box-sizing:border-box}}
 body{{font-family:system-ui,-apple-system,sans-serif;min-height:100vh;
@@ -115,7 +129,7 @@ h1{{font-size:20px;font-weight:600;margin-bottom:12px;color:#ff6b6b}}
 .detail{{color:#888;font-size:13px;background:#111;border-radius:8px;
 padding:12px;margin-top:16px;word-break:break-all;text-align:left}}
 </style></head><body><div class="card">
-<div class="icon">\xe2\x9a\xa0\xef\xb8\x8f</div>
+<div class="icon" role="img" aria-label="Error">&#x26A0;&#xFE0F;</div>
 <h1>Authentication Failed</h1>
 <p style="color:#aaa;font-size:14px">Something went wrong during the Monzo login.</p>
 <div class="detail">{safe_error}</div>
@@ -142,7 +156,7 @@ def trigger_background_auth_flow(token_manager: "TokenManager") -> str:
 
         def do_GET(self):
             self.send_response(200)
-            self.send_header("Content-type", "text/html")
+            self.send_header("Content-Type", "text/html; charset=utf-8")
             self.end_headers()
 
             try:
@@ -160,7 +174,7 @@ def trigger_background_auth_flow(token_manager: "TokenManager") -> str:
             threading.Thread(target=shutdown_server, daemon=True).start()
 
     try:
-        _loopback_server = HTTPServer(("0.0.0.0", port), CallbackHandler)
+        _loopback_server = HTTPServer(("127.0.0.1", port), CallbackHandler)
     except Exception as e:
         with _loopback_lock:
             _loopback_running = False
@@ -193,22 +207,32 @@ def trigger_background_auth_flow(token_manager: "TokenManager") -> str:
     auth_url = token_manager.generate_auth_url()
     _open_browser(auth_url)
 
-    wsl_note = ""
-    if _is_wsl():
-        wsl_note = (
-            "\n\nNOTE (WSL detected): The automatic callback listener may not "
-            "work in WSL due to network isolation. After logging in, if the "
-            "browser shows a connection error on the redirect page, copy the "
-            "FULL URL from the browser address bar and pass it to the "
-            "monzo_complete_auth tool to finish authentication."
+    remote = _is_remote_or_headless()
+
+    fallback_note = (
+        "\n\nNOTE: If the redirect page shows a connection error after you "
+        "log in (common in WSL, Docker, SSH, or remote environments), copy "
+        "the FULL URL from the browser address bar and pass it to the "
+        "monzo_complete_auth tool to finish authentication."
+    )
+
+    if remote:
+        return (
+            "Authentication required. Copy this link into a browser:\n\n"
+            f"{auth_url}\n\n"
+            "After logging in to Monzo, your browser will redirect to a "
+            "localhost URL. Since the loopback listener may not be reachable "
+            "from your local browser, copy the FULL URL from the browser "
+            "address bar (starts with http://localhost:3118/callback?code=...) "
+            "and pass it to the monzo_complete_auth tool."
         )
 
     return (
         "Authentication required. A browser window has been opened.\n"
-        "If it didn't open automatically, please click this link:\n\n"
+        "If it didn't open automatically, copy this link:\n\n"
         f"{auth_url}\n\n"
         "Waiting for you to complete the login... (Timeout in 5 minutes)"
-        f"{wsl_note}"
+        f"{fallback_note}"
     )
 
 
@@ -226,6 +250,7 @@ class TokenManager:
         self._access_token: str = ""
         self._refresh_token: str = ""
         self._account_id: str = ""
+        self._oauth_state: str = ""
 
         if not self._client_id or not self._client_secret:
             raise AuthError(
@@ -255,11 +280,12 @@ class TokenManager:
 
     def generate_auth_url(self) -> str:
         """Generate the Monzo OAuth authorization URL."""
+        self._oauth_state = secrets.token_urlsafe(32)
         params = urllib.parse.urlencode({
             "client_id": self._client_id,
             "redirect_uri": REDIRECT_URI,
             "response_type": "code",
-            "state": "monzo_mcp",
+            "state": self._oauth_state,
         })
         return f"{MONZO_AUTH_URL}?{params}"
 
@@ -272,6 +298,10 @@ class TokenManager:
 
         if "error" in params:
             raise AuthError(f"OAuth error: {params['error'][0]}")
+
+        returned_state = params.get("state", [None])[0]
+        if self._oauth_state and returned_state != self._oauth_state:
+            raise AuthError("OAuth state mismatch — possible CSRF. Please retry authentication.")
 
         code = params.get("code", [None])[0]
         if not code:
@@ -294,8 +324,8 @@ class TokenManager:
             self._access_token = data.get("access_token", "")
             self._refresh_token = data.get("refresh_token", "")
             self._account_id = data.get("account_id", "")
-        except (json.JSONDecodeError, OSError):
-            pass
+        except (json.JSONDecodeError, OSError) as e:
+            logger.warning("Failed to load stored tokens: %s", e)
 
     def _save_tokens(self) -> None:
         """Persist tokens to internal storage."""
@@ -349,8 +379,8 @@ class TokenManager:
                 if not acc.get("closed", False):
                     self._account_id = acc["id"]
                     return
-        except Exception:
-            pass
+        except Exception as e:
+            logger.warning("Failed to detect account ID: %s", e)
 
     # --- Token Refresh ---
 
