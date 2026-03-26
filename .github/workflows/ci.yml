@@ -39,4 +39,3 @@ jobs:
       - name: Verify entry points
         run: |
           which monzo-mcp
-          which monzo-mcp-auth

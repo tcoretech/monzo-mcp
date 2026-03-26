@@ -6,7 +6,7 @@ Read-only Monzo banking integration for Claude Code. Query balances, view transa
 
 | Tool | Description |
 |------|-------------|
-| `monzo_whoami` | Verify authentication status |
+| `monzo_is_authenticated` | Verify authentication status (live ping) |
 | `monzo_list_accounts` | List all accounts (current, joint, flex) |
 | `monzo_get_balance` | Current balance and today's spending |
 | `monzo_list_transactions` | Transaction history with merchant details |
@@ -27,8 +27,19 @@ Read-only Monzo banking integration for Claude Code. Query balances, view transa
 
 ## Quick Start
 
-### Option 1: uvx (recommended — no clone needed)
+### 1. Create an OAuth Client
+Go to [developers.monzo.com](https://developers.monzo.com/) and create a **Confidential** client.
+*   **Redirect URL:** `http://localhost:3118/callback`
 
+### 2. Installation Options
+
+#### Option 1: Claude Code Plugin (Marketplace)
+```bash
+/plugin marketplace add tcoretech/monzo-mcp
+/plugin install monzo@tcoretech
+```
+
+#### Option 2: uvx (recommended — no clone needed)
 ```bash
 claude mcp add monzo \
   -e MONZO_CLIENT_ID=your_client_id \
@@ -36,34 +47,16 @@ claude mcp add monzo \
   -- uvx --from monzo-mcp monzo-mcp
 ```
 
-Replace `your_client_id` and `your_client_secret` with the values from [developers.monzo.com](https://developers.monzo.com/).
-
-On first use, the server opens your browser to log in to Monzo. Tokens are stored internally — you never touch them.
-
-### Option 2: Claude Code Plugin (Marketplace)
-
-```bash
-/plugin marketplace add tcoretech/monzo-mcp
-/plugin install monzo@tcoretech
-```
-
-### Option 3: pip install
-
+#### Option 3: pip install
 ```bash
 pip install monzo-mcp
-```
-
-Then register in Claude Code:
-
-```bash
 claude mcp add monzo \
   -e MONZO_CLIENT_ID=your_client_id \
   -e MONZO_CLIENT_SECRET=your_client_secret \
   -- monzo-mcp
 ```
 
-### Option 4: Clone
-
+#### Option 4: Clone & Run from Source
 ```bash
 git clone https://github.com/tcoretech/monzo-mcp.git
 cd monzo-mcp
@@ -71,43 +64,42 @@ pip install -e .
 claude mcp add monzo \
   -e MONZO_CLIENT_ID=your_client_id \
   -e MONZO_CLIENT_SECRET=your_client_secret \
-  -- python mcp-server/server.py
+  -- python3 mcp-server/server.py
+```
+
+### 3. Generic MCP Configuration (Desktop/JSON)
+For use with Claude Desktop or other MCP clients, add this to your configuration:
+
+```json
+{
+  "mcpServers": {
+    "monzo": {
+      "command": "python3",
+      "args": [
+        "/absolute/path/to/monzo-mcp/mcp-server/server.py"
+      ],
+      "env": {
+        "MONZO_CLIENT_ID": "YOUR_CLIENT_ID",
+        "MONZO_CLIENT_SECRET": "YOUR_CLIENT_SECRET",
+        "MONZO_REDIRECT_URI": "http://localhost:3118/callback"
+      }
+    }
+  }
+}
 ```
 
 ---
 
-## Authentication
+## Authentication (Seamless OAuth)
 
-### How it works
+This server implements a **Seamless Loopback Flow**. You don't need to run a separate setup command.
 
-You only provide **two things** — your OAuth client credentials:
+1.  **Just-in-Time Auth:** When you first ask Claude about your Monzo account, the server will detect missing tokens and automatically open your browser to the Monzo login page.
+2.  **Loopback Listener:** A temporary local server (defaulting to port 3118) catches the callback from Monzo and saves your tokens securely to `~/.monzo-mcp/tokens.json`.
+3.  **WSL & Docker Support:** The server is environment-aware and will use PowerShell to bridge to your Windows host browser if running in WSL.
+4.  **SCA (Strong Customer Authentication):** If Monzo requires an app approval, Claude will inform you. Simply tap "Approve" in your Monzo mobile app and tell Claude you've done so.
 
-| Env Var | Where to get it |
-| ------- | --------------- |
-| `MONZO_CLIENT_ID` | [developers.monzo.com](https://developers.monzo.com/) |
-| `MONZO_CLIENT_SECRET` | Same page |
-
-Everything else is handled automatically:
-
-1. **First tool call** — server detects no tokens, opens your browser to Monzo login
-2. **You log in** — Monzo redirects back to `localhost:3118/callback`
-3. **Tokens stored** — saved to `~/.monzo-mcp/tokens.json` (never in env vars)
-4. **Auto-refresh** — tokens are refreshed automatically on expiry
-5. **Account auto-detected** — your primary account is found automatically
-
-> **Important:** After browser login, open your Monzo app and approve the push notification (Strong Customer Authentication).
-
-### Manual auth setup (optional)
-
-If you prefer to authenticate before first use:
-
-```bash
-# Interactive — prompts for client ID/secret if not in env
-monzo-mcp-auth
-
-# Or from source
-python mcp-server/setup_auth.py
-```
+> **Note:** Tokens are stored with `0600` permissions (owner only). Access tokens are refreshed automatically.
 
 ### Where are tokens stored?
 
@@ -143,8 +135,7 @@ monzo-mcp/
 │   ├── server.py            # FastMCP entry point (stdio)
 │   ├── tools.py             # 7 read-only tool definitions
 │   ├── monzo_client.py      # Async API client with retry
-│   ├── auth.py              # OAuth token management + auto-refresh
-│   ├── setup_auth.py        # Interactive browser OAuth setup
+│   ├── auth.py              # OAuth token management, loopback listener, auto-refresh
 │   └── .env.example
 ├── skills/monzo/
 │   ├── SKILL.md             # Domain knowledge for Claude

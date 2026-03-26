@@ -1,19 +1,21 @@
 """Token management for Monzo API authentication.
 
-Only requires MONZO_CLIENT_ID and MONZO_CLIENT_SECRET as env vars.
+Requires MONZO_CLIENT_ID and MONZO_CLIENT_SECRET.
+MONZO_REDIRECT_URI is optional (defaults to http://localhost:3118/callback).
 All tokens (access, refresh) and account ID are obtained via OAuth
-browser flow and stored internally in ~/.monzo-mcp/tokens.json.
+and stored internally in ~/.monzo-mcp/tokens.json.
 """
 
-import http.server
 import json
 import logging
 import os
-import threading
 import urllib.parse
-import webbrowser
 from pathlib import Path
-from typing import Any
+import threading
+from http.server import HTTPServer, BaseHTTPRequestHandler
+import webbrowser
+import subprocess
+import time
 
 import httpx
 
@@ -22,9 +24,7 @@ logger = logging.getLogger(__name__)
 MONZO_AUTH_URL = "https://auth.monzo.com/"
 MONZO_TOKEN_URL = "https://api.monzo.com/oauth2/token"
 MONZO_API_BASE = "https://api.monzo.com"
-CALLBACK_PORT = 3118
-CALLBACK_PATH = "/callback"
-REDIRECT_URI = f"http://localhost:{CALLBACK_PORT}{CALLBACK_PATH}"
+REDIRECT_URI = os.environ.get("MONZO_REDIRECT_URI", "http://localhost:3118/callback")
 
 # Internal token storage — user never touches this
 TOKEN_DIR = Path.home() / ".monzo-mcp"
@@ -36,70 +36,126 @@ class AuthError(Exception):
 
 
 class NeedsAuthError(AuthError):
-    """Raised when OAuth browser flow is required."""
+    """Raised when OAuth is required. Triggers background flow."""
 
-    def __init__(self):
-        super().__init__(
-            "Monzo authentication required. Run `monzo-mcp-auth` or "
-            "`python setup_auth.py` to log in via your browser."
-        )
+    def __init__(self, message: str = ""):
+        self.message = message
+        super().__init__(message or "Monzo authentication required.")
 
 
-class _OAuthCallbackHandler(http.server.BaseHTTPRequestHandler):
-    """HTTP handler that captures the OAuth callback."""
+_loopback_running = False
+_loopback_lock = threading.Lock()
+_loopback_server = None
 
-    auth_code: str | None = None
-    error: str | None = None
+def _is_wsl() -> bool:
+    try:
+        if os.path.exists("/proc/sys/kernel/osrelease"):
+            with open("/proc/sys/kernel/osrelease", "r") as f:
+                return "microsoft" in f.read().lower()
+    except Exception:
+        pass
+    return False
 
-    def do_GET(self):
-        parsed = urllib.parse.urlparse(self.path)
-        if parsed.path != CALLBACK_PATH:
-            self.send_response(404)
+def _open_browser(url: str) -> None:
+    if _is_wsl():
+        try:
+            # Use powershell.exe to open URL from WSL
+            subprocess.run(["powershell.exe", "-Command", f"Start-Process '{url}'"], check=True, capture_output=True)
+            return
+        except Exception as e:
+            logger.warning("Failed to open browser via powershell in WSL: %s", e)
+    
+    try:
+        webbrowser.open(url)
+    except Exception as e:
+        logger.warning("Failed to open browser: %s", e)
+
+def trigger_background_auth_flow(token_manager: "TokenManager") -> str:
+    global _loopback_running, _loopback_server
+    
+    with _loopback_lock:
+        if _loopback_running:
+            return "Authentication is already in progress. Please check your browser or terminal output."
+        _loopback_running = True
+
+    try:
+        parsed_uri = urllib.parse.urlparse(REDIRECT_URI)
+        port = parsed_uri.port or 3118
+    except Exception:
+        port = 3118
+
+    class CallbackHandler(BaseHTTPRequestHandler):
+        def log_message(self, format, *args):
+            pass
+
+        def do_GET(self):
+            self.send_response(200)
+            self.send_header("Content-type", "text/html")
             self.end_headers()
-            return
+            
+            try:
+                # Construct full URL for exchange
+                full_path = f"http://localhost:{port}{self.path}"
+                token_manager.exchange_from_callback_url(full_path)
+                self.wfile.write(b"<html><body><h1>Authentication successful!</h1><p>You can close this tab and return to the chat.</p></body></html>")
+            except Exception as e:
+                self.wfile.write(f"<html><body><h1>Authentication failed</h1><p>{e}</p></body></html>".encode("utf-8"))
+            
+            # Stop the server after a short delay
+            def shutdown_server():
+                time.sleep(1)
+                if _loopback_server:
+                    _loopback_server.shutdown()
+            threading.Thread(target=shutdown_server, daemon=True).start()
 
-        params = urllib.parse.parse_qs(parsed.query)
+    try:
+        _loopback_server = HTTPServer(("0.0.0.0", port), CallbackHandler)
+    except Exception as e:
+        with _loopback_lock:
+            _loopback_running = False
+            _loopback_server = None
+        return f"Failed to start local listener on port {port}: {e}"
 
-        if "error" in params:
-            _OAuthCallbackHandler.error = params["error"][0]
-            self._respond("Authentication failed. You can close this tab.")
-            return
+    def run_server():
+        global _loopback_running, _loopback_server
+        try:
+            _loopback_server.serve_forever()
+        finally:
+            if _loopback_server:
+                _loopback_server.server_close()
+            with _loopback_lock:
+                _loopback_running = False
+                _loopback_server = None
 
-        if "code" in params:
-            _OAuthCallbackHandler.auth_code = params["code"][0]
-            self._respond(
-                "Monzo authentication successful! "
-                "You can close this tab and return to Claude Code."
-            )
-            return
+    threading.Thread(target=run_server, daemon=True).start()
 
-        self.send_response(400)
-        self.end_headers()
+    # Timeout thread (5 minutes)
+    def timeout_server():
+        time.sleep(300)
+        with _loopback_lock:
+            if _loopback_running and _loopback_server:
+                logger.info("Auth loopback server timed out after 5 minutes")
+                _loopback_server.shutdown()
 
-    def _respond(self, message: str):
-        html = (
-            f'<!DOCTYPE html><html><head><title>Monzo MCP</title>'
-            f'<style>body{{font-family:system-ui;display:flex;justify-content:center;'
-            f'align-items:center;height:100vh;margin:0;background:#1a1a2e;color:#e0e0e0}}'
-            f'.card{{background:#16213e;padding:2rem;border-radius:12px;text-align:center}}'
-            f'h2{{color:#00d4aa}}</style></head>'
-            f'<body><div class="card"><h2>{message}</h2></div></body></html>'
-        )
-        self.send_response(200)
-        self.send_header("Content-Type", "text/html")
-        self.end_headers()
-        self.wfile.write(html.encode())
+    threading.Thread(target=timeout_server, daemon=True).start()
 
-    def log_message(self, format, *args):
-        pass  # Suppress request logging
+    auth_url = token_manager.generate_auth_url()
+    _open_browser(auth_url)
+
+    return (
+        "Authentication required. A browser window has been opened.\n"
+        "If it didn't open automatically, please click this link:\n\n"
+        f"{auth_url}\n\n"
+        "Waiting for you to complete the login... (Timeout in 5 minutes)"
+    )
 
 
 class TokenManager:
     """Manages Monzo OAuth tokens with internal storage and auto-refresh.
 
     Only MONZO_CLIENT_ID and MONZO_CLIENT_SECRET are needed as env vars.
-    Tokens are obtained via OAuth browser flow and stored in
-    ~/.monzo-mcp/tokens.json, refreshed automatically on 401.
+    Tokens are obtained via OAuth and stored in ~/.monzo-mcp/tokens.json,
+    refreshed automatically on 401.
     """
 
     def __init__(self):
@@ -129,15 +185,46 @@ class TokenManager:
     def get_headers(self) -> dict[str, str]:
         """Return authorization headers for API requests."""
         if not self._access_token:
-            raise NeedsAuthError()
+            msg = trigger_background_auth_flow(self)
+            raise NeedsAuthError(msg)
         return {"Authorization": f"Bearer {self._access_token}"}
+
+    # --- OAuth URL Generation ---
+
+    def generate_auth_url(self) -> str:
+        """Generate the Monzo OAuth authorization URL."""
+        params = urllib.parse.urlencode({
+            "client_id": self._client_id,
+            "redirect_uri": REDIRECT_URI,
+            "response_type": "code",
+            "state": "monzo_mcp",
+        })
+        return f"{MONZO_AUTH_URL}?{params}"
+
+    # --- OAuth Code Exchange ---
+
+    def exchange_from_callback_url(self, callback_url: str) -> None:
+        """Extract auth code from a callback URL and exchange for tokens."""
+        parsed = urllib.parse.urlparse(callback_url)
+        params = urllib.parse.parse_qs(parsed.query)
+
+        if "error" in params:
+            raise AuthError(f"OAuth error: {params['error'][0]}")
+
+        code = params.get("code", [None])[0]
+        if not code:
+            raise AuthError("No authorization code found in the URL.")
+
+        self._exchange_code(code)
+        self._detect_account_id()
+        self._save_tokens()
+        logger.info("Authentication completed successfully")
 
     # --- Token Storage ---
 
     def _load_stored_tokens(self) -> None:
         """Load tokens from internal storage (~/.monzo-mcp/tokens.json)."""
         if not TOKEN_FILE.exists():
-            logger.info("No stored tokens found at %s", TOKEN_FILE)
             return
 
         try:
@@ -145,9 +232,8 @@ class TokenManager:
             self._access_token = data.get("access_token", "")
             self._refresh_token = data.get("refresh_token", "")
             self._account_id = data.get("account_id", "")
-            logger.info("Loaded stored tokens")
-        except (json.JSONDecodeError, OSError) as e:
-            logger.warning("Failed to load stored tokens: %s", e)
+        except (json.JSONDecodeError, OSError):
+            pass
 
     def _save_tokens(self) -> None:
         """Persist tokens to internal storage."""
@@ -159,67 +245,14 @@ class TokenManager:
         }
         try:
             TOKEN_FILE.write_text(json.dumps(data, indent=2))
-            # Restrict permissions on token file (best effort on Windows)
             try:
-                TOKEN_FILE.chmod(0o600)
+                os.chmod(TOKEN_FILE, 0o600)
             except OSError:
                 pass
-            logger.info("Tokens saved to %s", TOKEN_FILE)
         except OSError as e:
             logger.error("Failed to save tokens: %s", e)
 
-    # --- OAuth Browser Flow ---
-
-    def run_oauth_flow(self) -> None:
-        """Run the interactive OAuth browser flow.
-
-        Opens the user's browser to Monzo login, handles the callback,
-        exchanges the code for tokens, and stores them.
-        """
-        logger.info("Starting OAuth browser flow")
-
-        # Reset callback handler state
-        _OAuthCallbackHandler.auth_code = None
-        _OAuthCallbackHandler.error = None
-
-        # Start local callback server
-        server = http.server.HTTPServer(
-            ("localhost", CALLBACK_PORT), _OAuthCallbackHandler
-        )
-        server_thread = threading.Thread(target=server.handle_request, daemon=True)
-        server_thread.start()
-
-        # Open browser to Monzo auth
-        auth_params = urllib.parse.urlencode({
-            "client_id": self._client_id,
-            "redirect_uri": REDIRECT_URI,
-            "response_type": "code",
-            "state": "monzo_mcp",
-        })
-        auth_url = f"{MONZO_AUTH_URL}?{auth_params}"
-        webbrowser.open(auth_url)
-        logger.info("Opened browser for Monzo login")
-
-        # Wait for callback (5 minute timeout)
-        server_thread.join(timeout=300)
-        server.server_close()
-
-        if _OAuthCallbackHandler.error:
-            raise AuthError(f"OAuth failed: {_OAuthCallbackHandler.error}")
-
-        if not _OAuthCallbackHandler.auth_code:
-            raise AuthError("OAuth timeout — no authorization received within 5 minutes")
-
-        # Exchange code for tokens
-        self._exchange_code(_OAuthCallbackHandler.auth_code)
-
-        # Auto-detect account ID
-        self._detect_account_id()
-
-        # Save everything
-        self._save_tokens()
-
-        logger.info("OAuth flow completed successfully")
+    # --- Token Exchange ---
 
     def _exchange_code(self, code: str) -> None:
         """Exchange authorization code for access + refresh tokens."""
@@ -245,7 +278,7 @@ class TokenManager:
         try:
             response = httpx.get(
                 f"{MONZO_API_BASE}/accounts",
-                headers=self.get_headers(),
+                headers={"Authorization": f"Bearer {self._access_token}"},
                 params={"account_type": "uk_retail"},
             )
             response.raise_for_status()
@@ -253,22 +286,17 @@ class TokenManager:
             for acc in accounts:
                 if not acc.get("closed", False):
                     self._account_id = acc["id"]
-                    logger.info("Auto-detected account ID: %s", self._account_id)
                     return
-        except Exception as e:
-            logger.warning("Could not auto-detect account ID: %s", e)
+        except Exception:
+            pass
 
     # --- Token Refresh ---
 
     async def refresh(self, client: httpx.AsyncClient) -> None:
-        """Refresh the access token using the refresh token.
-
-        Called automatically by MonzoClient on 401 responses.
-        """
+        """Refresh the access token using the refresh token."""
         if not self._refresh_token:
-            raise NeedsAuthError()
-
-        logger.info("Refreshing access token")
+            msg = trigger_background_auth_flow(self)
+            raise NeedsAuthError(msg)
 
         try:
             response = await client.post(
@@ -282,10 +310,10 @@ class TokenManager:
             )
             response.raise_for_status()
         except httpx.HTTPStatusError as e:
-            raise AuthError(
-                f"Token refresh failed (HTTP {e.response.status_code}). "
-                "Run `monzo-mcp-auth` to re-authenticate."
-            ) from e
+            if e.response.status_code == 401:
+                msg = trigger_background_auth_flow(self)
+                raise NeedsAuthError(msg) from e
+            raise AuthError(f"Token refresh failed: {e}") from e
         except httpx.RequestError as e:
             raise AuthError(f"Token refresh request failed: {e}") from e
 
@@ -294,4 +322,3 @@ class TokenManager:
         self._refresh_token = data.get("refresh_token", self._refresh_token)
 
         self._save_tokens()
-        logger.info("Token refreshed and saved")

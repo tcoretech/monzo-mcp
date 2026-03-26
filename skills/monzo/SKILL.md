@@ -11,7 +11,7 @@ Read-only access to Monzo bank data via MCP server. Dual-layer: MCP tools handle
 
 | Tool | What it does |
 |------|-------------|
-| `monzo_whoami` | Verify auth status and token validity |
+| `monzo_is_authenticated` | Verify auth status (live ping to Monzo API) |
 | `monzo_list_accounts` | List all accounts (current, joint, flex) |
 | `monzo_get_balance` | Balance, total balance, and today's spending |
 | `monzo_list_transactions` | Recent transactions with merchant details |
@@ -38,7 +38,8 @@ When asked about spending:
 
 ## Common Gotchas
 
-- Always verify auth works with `monzo_whoami` if other calls fail
+- Always verify auth works with `monzo_is_authenticated` if other calls fail — it returns `needs_login`, `waiting_for_sca`, or `authenticated`
+- If a tool returns `waiting_for_sca`, stop and tell the user to approve the notification in their Monzo app before retrying
 - The `since` parameter on transactions can be a timestamp OR a transaction ID
 - Pot transfers show as transactions but should be excluded from spending analysis (the `monzo_spending_summary` tool handles this)
 - Max 100 transactions per API call — `monzo_spending_summary` paginates automatically

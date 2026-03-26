@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "monzo-mcp"
-version = "1.0.0"
+version = "1.1.0"
 description = "Read-only Monzo banking MCP server for Claude Code"
 readme = "README.md"
 license = "MIT"
@@ -27,7 +27,6 @@ dependencies = [
 
 [project.scripts]
 monzo-mcp = "monzo_mcp.server:main"
-monzo-mcp-auth = "monzo_mcp.setup_auth:main"
 
 [project.urls]
 Homepage = "https://github.com/tcoretech/monzo-mcp"

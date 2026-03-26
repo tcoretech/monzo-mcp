@@ -3,13 +3,8 @@
 Provides tools to check balances, list transactions, view pots,
 and analyze spending patterns via the Monzo API.
 
-Only requires MONZO_CLIENT_ID and MONZO_CLIENT_SECRET as env vars.
-Tokens are managed internally via OAuth browser flow.
-
-Usage:
-    python server.py
-    # or after pip install:
-    monzo-mcp
+Requires MONZO_CLIENT_ID and MONZO_CLIENT_SECRET.
+Tokens are managed internally via an automatic OAuth loopback flow.
 """
 
 import logging
@@ -34,22 +29,27 @@ logging.basicConfig(
 
 mcp = FastMCP("Monzo")
 
-# Lazy init — only create client when tools are actually called
+# Singletons — lazily created on first use
+_token_manager: TokenManager | None = None
 _client: MonzoClient | None = None
+
+
+def _get_token_manager() -> TokenManager:
+    global _token_manager
+    if _token_manager is None:
+        _token_manager = TokenManager()
+    return _token_manager
 
 
 def _get_client() -> MonzoClient:
     global _client
     if _client is None:
-        token_manager = TokenManager()
-        # If no stored tokens, run OAuth flow automatically
-        if not token_manager.is_authenticated:
-            token_manager.run_oauth_flow()
-        _client = MonzoClient(token_manager)
+        tm = _get_token_manager()
+        _client = MonzoClient(tm)
     return _client
 
 
-# Register tools with lazy client
+# Register the read-only banking tools with lazy client factory
 register_tools(mcp, _get_client)
 
 

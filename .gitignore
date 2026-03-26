@@ -3,6 +3,9 @@
 *.env.local
 tokens.json
 
+# Claude
+.claude/
+
 # Python
 __pycache__/
 *.pyc

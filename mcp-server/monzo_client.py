@@ -34,6 +34,13 @@ class MonzoAPIError(Exception):
         super().__init__(f"Monzo API error {status_code}: {message}")
 
 
+class MonzoSCAError(MonzoAPIError):
+    """Raised when Strong Customer Authentication (SCA) is required."""
+
+    def __init__(self, message: str):
+        super().__init__(403, message)
+
+
 class MonzoClient:
     """Async client for Monzo API with auth refresh and rate limit handling."""
 
@@ -61,6 +68,7 @@ class MonzoClient:
         """Make an authenticated request with retry logic.
 
         - On 401: attempt token refresh once, then retry.
+        - On 403: raise MonzoSCAError (SCA required).
         - On 429: exponential backoff with jitter, up to MAX_RETRIES.
         - Other 4xx/5xx: raise MonzoAPIError.
         """
@@ -81,6 +89,12 @@ class MonzoClient:
                 headers = self._token_manager.get_headers()
                 refreshed = True
                 continue
+
+            if response.status_code == 403:
+                raise MonzoSCAError(
+                    "Strong Customer Authentication (SCA) required. "
+                    "Please approve the notification in your Monzo mobile app."
+                )
 
             if response.status_code == 429 and attempt < MAX_RETRIES:
                 delay = min(
@@ -129,16 +143,7 @@ class MonzoClient:
         limit: int = 100,
         expand_merchant: bool = True,
     ) -> list[dict[str, Any]]:
-        """List transactions with optional filters. GET /transactions
-
-        Args:
-            account_id: Account to query (defaults to configured account).
-            since: ISO 8601 timestamp or transaction ID. Only returns transactions
-                   created after this.
-            before: ISO 8601 timestamp. Only returns transactions created before this.
-            limit: Max number of transactions to return (max 100).
-            expand_merchant: Include full merchant details in response.
-        """
+        """List transactions with optional filters. GET /transactions"""
         params: dict[str, Any] = {
             "account_id": account_id or self.account_id,
             "limit": min(limit, 100),
@@ -164,10 +169,7 @@ class MonzoClient:
         return data.get("transaction", data)
 
     async def list_pots(self) -> list[dict[str, Any]]:
-        """List all pots. GET /pots
-
-        Note: Uses the current_account_id parameter.
-        """
+        """List all pots. GET /pots"""
         data = await self.get("/pots", params={
             "current_account_id": self.account_id
         })
