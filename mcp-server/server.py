@@ -1,4 +1,4 @@
-"""Monzo MCP Server — read-only banking tools for Claude Code.
+"""Monzo MCP Server — read-only banking tools via MCP.
 
 Provides tools to check balances, list transactions, view pots,
 and analyze spending patterns via the Monzo API.

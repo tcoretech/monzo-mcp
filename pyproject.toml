@@ -4,15 +4,15 @@ build-backend = "hatchling.build"
 
 [project]
 name = "monzo-mcp"
-version = "1.0.4"
-description = "Read-only Monzo banking MCP server for Claude Code"
+version = "1.0.5"
+description = "Read-only Monzo banking MCP server"
 readme = "README.md"
 license = "MIT"
 requires-python = ">=3.10"
 authors = [
     { name = "tcoretech", email = "support@tcoretech.com" },
 ]
-keywords = ["monzo", "mcp", "claude", "banking", "finance"]
+keywords = ["monzo", "mcp", "banking", "finance"]
 classifiers = [
     "Development Status :: 4 - Beta",
     "Intended Audience :: Developers",

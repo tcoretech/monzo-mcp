@@ -2,7 +2,7 @@
 
 Each tool is a function decorated with @mcp.tool() that wraps
 a MonzoClient method. Tool docstrings become the descriptions
-that Claude sees.
+that the LLM sees.
 """
 
 from collections import defaultdict

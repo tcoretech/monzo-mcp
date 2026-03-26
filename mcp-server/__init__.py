@@ -1,1 +1,1 @@
-"""Monzo MCP Server — read-only banking tools for Claude Code."""
+"""Monzo MCP Server — read-only banking tools via MCP."""

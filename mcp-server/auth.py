@@ -92,7 +92,7 @@ display:flex;align-items:center;gap:8px}
 stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round">
 <polyline points="20 6 9 17 4 12"/></svg></div>
 <h1>Connected to Monzo</h1>
-<p class="sub">You can close this tab and return to Claude.</p>
+<p class="sub">You can close this tab and return to your chat.</p>
 <div class="sca"><div class="sca-title">\xf0\x9f\x94\x90 Check your phone</div>
 <div class="sca-body">Open the <strong>Monzo app</strong> and tap
 <strong>Approve</strong> on the push notification to complete
