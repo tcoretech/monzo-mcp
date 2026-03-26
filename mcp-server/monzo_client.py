@@ -56,7 +56,15 @@ class MonzoClient:
 
     @property
     def account_id(self) -> str:
-        return self._token_manager.account_id
+        aid = self._token_manager.account_id
+        if not aid:
+            # Account ID wasn't detected at login (SCA not yet approved).
+            # Try once now — this succeeds after the user approves in-app.
+            self._token_manager._detect_account_id()
+            if self._token_manager.account_id:
+                self._token_manager._save_tokens()
+            aid = self._token_manager.account_id
+        return aid
 
     async def _request(
         self,
