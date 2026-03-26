@@ -142,11 +142,22 @@ def trigger_background_auth_flow(token_manager: "TokenManager") -> str:
     auth_url = token_manager.generate_auth_url()
     _open_browser(auth_url)
 
+    wsl_note = ""
+    if _is_wsl():
+        wsl_note = (
+            "\n\nNOTE (WSL detected): The automatic callback listener may not "
+            "work in WSL due to network isolation. After logging in, if the "
+            "browser shows a connection error on the redirect page, copy the "
+            "FULL URL from the browser address bar and pass it to the "
+            "monzo_complete_auth tool to finish authentication."
+        )
+
     return (
         "Authentication required. A browser window has been opened.\n"
         "If it didn't open automatically, please click this link:\n\n"
         f"{auth_url}\n\n"
         "Waiting for you to complete the login... (Timeout in 5 minutes)"
+        f"{wsl_note}"
     )
 
 

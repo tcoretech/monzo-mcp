@@ -12,20 +12,26 @@ from typing import Any, Callable
 from fastmcp import FastMCP
 
 try:
-    from monzo_mcp.auth import NeedsAuthError
+    from monzo_mcp.auth import NeedsAuthError, TokenManager
     from monzo_mcp.monzo_client import MonzoClient, MonzoSCAError
 except ImportError:
-    from auth import NeedsAuthError
+    from auth import NeedsAuthError, TokenManager
     from monzo_client import MonzoClient, MonzoSCAError
 
 
-def register_tools(mcp: FastMCP, client_or_factory: MonzoClient | Callable[[], MonzoClient]) -> None:
+def register_tools(
+    mcp: FastMCP,
+    client_or_factory: MonzoClient | Callable[[], MonzoClient],
+    token_manager_factory: Callable[[], TokenManager] | None = None,
+) -> None:
     """Register all Monzo tools with the MCP server.
 
     Args:
         mcp: The FastMCP server instance.
         client_or_factory: Either a MonzoClient instance or a callable
             that returns one (for lazy initialization).
+        token_manager_factory: Callable that returns the TokenManager
+            (for manual auth completion in WSL/Docker).
     """
 
     def _client() -> MonzoClient:
@@ -79,6 +85,28 @@ def register_tools(mcp: FastMCP, client_or_factory: MonzoClient | Callable[[], M
                 "status": "waiting_for_sca", 
                 "message": "SCA required. Please approve the notification in your Monzo app."
             }
+        except Exception as e:
+            return {"status": "error", "message": str(e)}
+
+    @mcp.tool()
+    async def monzo_complete_auth(callback_url: str) -> dict[str, Any]:
+        """Complete authentication by providing the OAuth callback URL.
+
+        Use this tool when the automatic loopback listener could not catch
+        the callback (common in WSL or Docker). After logging in to Monzo
+        in the browser, copy the FULL URL from the browser address bar
+        (it starts with http://localhost:3118/callback?code=...) and pass
+        it here.
+
+        Args:
+            callback_url: The full redirect URL from the browser address bar.
+        """
+        try:
+            if token_manager_factory is None:
+                return {"status": "error", "message": "Token manager not available."}
+            tm = token_manager_factory()
+            tm.exchange_from_callback_url(callback_url)
+            return {"status": "authenticated", "message": "Authentication completed successfully."}
         except Exception as e:
             return {"status": "error", "message": str(e)}
 

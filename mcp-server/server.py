@@ -50,7 +50,7 @@ def _get_client() -> MonzoClient:
 
 
 # Register the read-only banking tools with lazy client factory
-register_tools(mcp, _get_client)
+register_tools(mcp, _get_client, token_manager_factory=_get_token_manager)
 
 
 def main():
