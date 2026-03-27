@@ -10,14 +10,26 @@
   "homepage": "https://github.com/tcoretech/monzo-mcp",
   "category": "finance",
   "keywords": ["monzo", "banking", "finance", "mcp", "spending"],
-  "mcp": {
-    "server": "mcp-server/server.py",
-    "command": "python",
-    "transport": "stdio"
+  "userConfig": {
+    "client_id": {
+      "description": "Monzo OAuth Client ID (from developers.monzo.com)",
+      "sensitive": true
+    },
+    "client_secret": {
+      "description": "Monzo OAuth Client Secret (from developers.monzo.com)",
+      "sensitive": true
+    }
   },
-  "skills": "./skills/",
-  "requires": {
-    "python": ">=3.10",
-    "env": ["MONZO_CLIENT_ID", "MONZO_CLIENT_SECRET"]
-  }
+  "mcpServers": {
+    "monzo": {
+      "command": "python",
+      "args": ["${CLAUDE_PLUGIN_ROOT}/mcp-server/server.py"],
+      "env": {
+        "MONZO_CLIENT_ID": "${user_config.client_id}",
+        "MONZO_CLIENT_SECRET": "${user_config.client_secret}"
+      },
+      "transport": "stdio"
+    }
+  },
+  "skills": "./skills/"
 }
