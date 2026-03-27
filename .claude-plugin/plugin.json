@@ -1,6 +1,6 @@
 {
   "name": "monzo",
-  "version": "1.0.8",
+  "version": "1.0.9",
   "description": "Read-only Monzo banking integration — balances, transactions, pots, and spending analysis via MCP server",
   "author": {
     "name": "tcoretech",
@@ -8,7 +8,20 @@
   },
   "license": "MIT",
   "homepage": "https://github.com/tcoretech/monzo-mcp",
-  "category": "finance",
   "keywords": ["monzo", "banking", "finance", "mcp", "spending"],
+  "userConfig": {
+    "client_id": {
+      "title": "Monzo Client ID",
+      "description": "OAuth Client ID from developers.monzo.com (starts with oauth2client_)",
+      "type": "string",
+      "sensitive": true
+    },
+    "client_secret": {
+      "title": "Monzo Client Secret",
+      "description": "OAuth Client Secret from developers.monzo.com (starts with mnzconf.)",
+      "type": "string",
+      "sensitive": true
+    }
+  },
   "skills": "./skills/"
 }

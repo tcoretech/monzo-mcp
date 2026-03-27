@@ -1,8 +1,10 @@
 """Token management for Monzo API authentication.
 
-Reads MONZO_CLIENT_ID and MONZO_CLIENT_SECRET from:
-  1. ~/.monzo-mcp/config.json (preferred — written by plugin setup)
-  2. Environment variables (fallback — for manual MCP installs)
+Reads MONZO_CLIENT_ID and MONZO_CLIENT_SECRET from environment variables.
+When installed as a Claude Code plugin, these are set automatically from
+the system keychain via userConfig. For manual MCP installs, pass them
+via -e flags or shell environment.
+
 MONZO_REDIRECT_URI is optional (defaults to http://localhost:3118/callback).
 All tokens (access, refresh) and account ID are obtained via OAuth
 and stored internally in ~/.monzo-mcp/tokens.json.
@@ -30,30 +32,9 @@ MONZO_TOKEN_URL = "https://api.monzo.com/oauth2/token"
 MONZO_API_BASE = "https://api.monzo.com"
 REDIRECT_URI = os.environ.get("MONZO_REDIRECT_URI", "http://localhost:3118/callback")
 
-# Internal storage directory
+# Internal token storage — user never touches this
 TOKEN_DIR = Path.home() / ".monzo-mcp"
 TOKEN_FILE = TOKEN_DIR / "tokens.json"
-CONFIG_FILE = TOKEN_DIR / "config.json"
-
-
-def _load_client_credentials() -> tuple[str, str]:
-    """Load client_id and client_secret from config file or env vars."""
-    # 1. Try config file (written by plugin setup flow)
-    if CONFIG_FILE.exists():
-        try:
-            data = json.loads(CONFIG_FILE.read_text())
-            cid = data.get("client_id", "")
-            csec = data.get("client_secret", "")
-            if cid and csec:
-                return cid, csec
-        except (json.JSONDecodeError, OSError) as e:
-            logger.warning("Failed to read config file: %s", e)
-
-    # 2. Fall back to env vars (manual MCP installs)
-    return (
-        os.environ.get("MONZO_CLIENT_ID", ""),
-        os.environ.get("MONZO_CLIENT_SECRET", ""),
-    )
 
 
 class AuthError(Exception):
@@ -268,7 +249,8 @@ class TokenManager:
     """
 
     def __init__(self):
-        self._client_id, self._client_secret = _load_client_credentials()
+        self._client_id = os.environ.get("MONZO_CLIENT_ID", "")
+        self._client_secret = os.environ.get("MONZO_CLIENT_SECRET", "")
         self._access_token: str = ""
         self._refresh_token: str = ""
         self._account_id: str = ""
@@ -276,9 +258,10 @@ class TokenManager:
 
         if not self._client_id or not self._client_secret:
             raise AuthError(
-                "Monzo OAuth credentials not found. Either:\n"
-                "  1. Create ~/.monzo-mcp/config.json with client_id and client_secret\n"
-                "  2. Set MONZO_CLIENT_ID and MONZO_CLIENT_SECRET environment variables\n"
+                "MONZO_CLIENT_ID and MONZO_CLIENT_SECRET are required. "
+                "When installed as a Claude Code plugin, these are set "
+                "automatically from the keychain. For manual installs, "
+                "pass them via -e flags in your MCP config. "
                 "Get credentials at https://developers.monzo.com/"
             )
 

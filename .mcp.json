@@ -1,6 +1,10 @@
 {
   "monzo": {
     "command": "uvx",
-    "args": ["--from", "monzo-mcp", "monzo-mcp"]
+    "args": ["--from", "monzo-mcp", "monzo-mcp"],
+    "env": {
+      "MONZO_CLIENT_ID": "${user_config.client_id}",
+      "MONZO_CLIENT_SECRET": "${user_config.client_secret}"
+    }
   }
 }

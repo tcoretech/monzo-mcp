@@ -181,6 +181,7 @@ User provides                 Server handles internally
 
 ## Changelog
 
+- **v1.0.9** — Plugin credentials via keychain: `userConfig` prompts at enable time, stores securely in system keychain
 - **v1.0.8** — Seamless plugin onboarding: credentials read from `~/.monzo-mcp/config.json`, interactive setup via SessionStart hook
 - **v1.0.7** — Security hardening (OAuth state nonce, bind 127.0.0.1, XSS escaping), code quality fixes, docs refresh
 - **v1.0.6** — Include `decline_reason` in list_transactions output
