@@ -15,9 +15,7 @@
     "command": "python",
     "transport": "stdio"
   },
-  "skills": [
-    "skills/monzo/SKILL.md"
-  ],
+  "skills": "./skills/",
   "requires": {
     "python": ">=3.10",
     "env": ["MONZO_CLIENT_ID", "MONZO_CLIENT_SECRET"]
