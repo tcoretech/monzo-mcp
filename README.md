@@ -99,19 +99,20 @@ For use with Claude Desktop or other MCP clients, add this to your configuration
 This server implements a **Seamless Loopback Flow**. You don't need to run a separate setup command.
 
 1.  **Just-in-Time Auth:** When you first ask Claude about your Monzo account, the server will detect missing tokens and automatically open your browser to the Monzo login page.
-2.  **Loopback Listener:** A temporary local server (defaulting to port 3118) catches the callback from Monzo and saves your tokens securely to `~/.monzo-mcp/tokens.json`.
+2.  **Loopback Listener:** A temporary local server (defaulting to port 3118) catches the callback from Monzo and saves your tokens securely to the system keychain.
 3.  **WSL & Docker Support:** The server is environment-aware and will use PowerShell to bridge to your Windows host browser if running in WSL.
 4.  **SCA (Strong Customer Authentication):** If Monzo requires an app approval, Claude will inform you. Simply tap "Approve" in your Monzo mobile app and tell Claude you've done so.
 
-> **Note:** Tokens are stored with `0600` permissions (owner only). Access tokens are refreshed automatically.
+> **Note:** Tokens are stored in the system keychain when available, with a plaintext fallback at `~/.monzo-mcp/tokens.json` (0600 permissions). Existing plaintext tokens are automatically migrated to the keychain. Access tokens are refreshed automatically.
 
 ### Where are tokens stored?
 
-```text
-~/.monzo-mcp/tokens.json    # access_token, refresh_token, account_id
-```
+| Storage | Location | When used |
+|---------|----------|-----------|
+| System keychain | `monzo-mcp` service | Default (macOS Keychain, GNOME Keyring, Windows Credential Locker) |
+| Plaintext fallback | `~/.monzo-mcp/tokens.json` | When keychain is unavailable |
 
-This file is created automatically, permissions restricted to your user, and never needs manual editing. Delete it to force re-authentication.
+To force re-authentication, clear the keychain entry or delete the fallback file.
 
 ---
 
@@ -181,6 +182,7 @@ User provides                 Server handles internally
 
 ## Changelog
 
+- **v1.1.0** — Secure token storage: OAuth tokens stored in system keychain (with plaintext fallback), auto-migrates existing tokens
 - **v1.0.9** — Plugin credentials via keychain: `userConfig` prompts at enable time, stores securely in system keychain
 - **v1.0.8** — Seamless plugin onboarding: credentials read from `~/.monzo-mcp/config.json`, interactive setup via SessionStart hook
 - **v1.0.7** — Security hardening (OAuth state nonce, bind 127.0.0.1, XSS escaping), code quality fixes, docs refresh

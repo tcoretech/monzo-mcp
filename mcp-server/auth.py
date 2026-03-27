@@ -7,7 +7,7 @@ via -e flags or shell environment.
 
 MONZO_REDIRECT_URI is optional (defaults to http://localhost:3118/callback).
 All tokens (access, refresh) and account ID are obtained via OAuth
-and stored internally in ~/.monzo-mcp/tokens.json.
+and stored in the system keychain (with plaintext fallback).
 """
 
 import html
@@ -25,6 +25,12 @@ import time
 
 import httpx
 
+try:
+    import keyring
+    _HAS_KEYRING = True
+except ImportError:
+    _HAS_KEYRING = False
+
 logger = logging.getLogger(__name__)
 
 MONZO_AUTH_URL = "https://auth.monzo.com/"
@@ -32,7 +38,10 @@ MONZO_TOKEN_URL = "https://api.monzo.com/oauth2/token"
 MONZO_API_BASE = "https://api.monzo.com"
 REDIRECT_URI = os.environ.get("MONZO_REDIRECT_URI", "http://localhost:3118/callback")
 
-# Internal token storage — user never touches this
+# Keyring service name for token storage
+_KEYRING_SERVICE = "monzo-mcp"
+
+# Fallback plaintext storage (used when keyring is unavailable)
 TOKEN_DIR = Path.home() / ".monzo-mcp"
 TOKEN_FILE = TOKEN_DIR / "tokens.json"
 
@@ -241,11 +250,11 @@ def trigger_background_auth_flow(token_manager: "TokenManager") -> str:
 
 
 class TokenManager:
-    """Manages Monzo OAuth tokens with internal storage and auto-refresh.
+    """Manages Monzo OAuth tokens with keychain storage and auto-refresh.
 
     Only MONZO_CLIENT_ID and MONZO_CLIENT_SECRET are needed as env vars.
-    Tokens are obtained via OAuth and stored in ~/.monzo-mcp/tokens.json,
-    refreshed automatically on 401.
+    Tokens are obtained via OAuth and stored in the system keychain
+    (with plaintext fallback), refreshed automatically on 401.
     """
 
     def __init__(self):
@@ -321,28 +330,57 @@ class TokenManager:
     # --- Token Storage ---
 
     def _load_stored_tokens(self) -> None:
-        """Load tokens from internal storage (~/.monzo-mcp/tokens.json)."""
+        """Load tokens from keychain, falling back to plaintext file."""
+        if _HAS_KEYRING:
+            try:
+                stored = keyring.get_password(_KEYRING_SERVICE, "tokens")
+                if stored:
+                    data = json.loads(stored)
+                    self._access_token = data.get("access_token", "")
+                    self._refresh_token = data.get("refresh_token", "")
+                    self._account_id = data.get("account_id", "")
+                    return
+            except Exception as e:
+                logger.warning("Failed to load tokens from keychain: %s", e)
+
+        # Fallback: plaintext file
         if not TOKEN_FILE.exists():
             return
-
         try:
             data = json.loads(TOKEN_FILE.read_text())
             self._access_token = data.get("access_token", "")
             self._refresh_token = data.get("refresh_token", "")
             self._account_id = data.get("account_id", "")
+            # Migrate to keychain if available
+            if _HAS_KEYRING and self._access_token:
+                self._save_tokens()
+                try:
+                    TOKEN_FILE.unlink()
+                    logger.info("Migrated tokens from plaintext to keychain")
+                except OSError:
+                    pass
         except (json.JSONDecodeError, OSError) as e:
             logger.warning("Failed to load stored tokens: %s", e)
 
     def _save_tokens(self) -> None:
-        """Persist tokens to internal storage."""
-        TOKEN_DIR.mkdir(parents=True, exist_ok=True)
-        data = {
+        """Persist tokens to keychain, falling back to plaintext file."""
+        data = json.dumps({
             "access_token": self._access_token,
             "refresh_token": self._refresh_token,
             "account_id": self._account_id,
-        }
+        })
+
+        if _HAS_KEYRING:
+            try:
+                keyring.set_password(_KEYRING_SERVICE, "tokens", data)
+                return
+            except Exception as e:
+                logger.warning("Failed to save tokens to keychain: %s", e)
+
+        # Fallback: plaintext file with restrictive permissions
+        TOKEN_DIR.mkdir(parents=True, exist_ok=True)
         try:
-            TOKEN_FILE.write_text(json.dumps(data, indent=2))
+            TOKEN_FILE.write_text(data)
             try:
                 os.chmod(TOKEN_FILE, 0o600)
             except OSError:

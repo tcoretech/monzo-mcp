@@ -1,6 +1,6 @@
 {
   "name": "monzo",
-  "version": "1.0.9",
+  "version": "1.1.0",
   "description": "Read-only Monzo banking integration — balances, transactions, pots, and spending analysis via MCP server",
   "author": {
     "name": "tcoretech",
