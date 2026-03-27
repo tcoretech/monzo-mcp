@@ -51,7 +51,15 @@ claude mcp add monzo \
   -- monzo-mcp
 ```
 
-#### Option 3: Clone & Run from Source
+#### Option 3: Claude Code Plugin (includes skills + auth hooks)
+In a Claude Code session, run:
+```
+/plugin marketplace add tcoretech/monzo-mcp
+/plugin install monzo@tcoretech-monzo-mcp
+```
+This registers the marketplace and installs the plugin, giving you the MCP server **plus** domain knowledge skills and an auth-check hook that runs on session start. You'll be prompted for your `MONZO_CLIENT_ID` and `MONZO_CLIENT_SECRET` during setup.
+
+#### Option 4: Clone & Run from Source
 ```bash
 git clone https://github.com/tcoretech/monzo-mcp.git
 cd monzo-mcp

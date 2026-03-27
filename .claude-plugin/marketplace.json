@@ -11,7 +11,7 @@
       "name": "monzo",
       "description": "Read-only Monzo banking tools — balances, transactions, pots, and spending analysis via MCP server",
       "category": "finance",
-      "source": ".",
+      "source": "./",
       "homepage": "https://github.com/tcoretech/monzo-mcp"
     }
   ]
