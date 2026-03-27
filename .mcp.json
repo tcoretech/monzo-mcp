@@ -1,10 +1,6 @@
 {
   "monzo": {
     "command": "python",
-    "args": ["${CLAUDE_PLUGIN_ROOT}/mcp-server/server.py"],
-    "env": {
-      "MONZO_CLIENT_ID": "${MONZO_CLIENT_ID}",
-      "MONZO_CLIENT_SECRET": "${MONZO_CLIENT_SECRET}"
-    }
+    "args": ["${CLAUDE_PLUGIN_ROOT}/mcp-server/server.py"]
   }
 }
