@@ -57,7 +57,9 @@ In a Claude Code session, run:
 /plugin marketplace add tcoretech/monzo-mcp
 /plugin install monzo@tcoretech-monzo-mcp
 ```
-This registers the marketplace and installs the plugin, giving you the MCP server **plus** domain knowledge skills and an auth-check hook that runs on session start. You'll be prompted for your `MONZO_CLIENT_ID` and `MONZO_CLIENT_SECRET` during setup.
+This registers the marketplace and installs the plugin, giving you the MCP server **plus** domain knowledge skills and an auth-check hook that runs on session start.
+
+You must have `MONZO_CLIENT_ID` and `MONZO_CLIENT_SECRET` set in your shell environment (e.g. in `~/.bashrc` or `~/.zshrc`).
 
 #### Option 4: Clone & Run from Source
 ```bash

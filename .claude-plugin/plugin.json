@@ -10,19 +10,5 @@
   "homepage": "https://github.com/tcoretech/monzo-mcp",
   "category": "finance",
   "keywords": ["monzo", "banking", "finance", "mcp", "spending"],
-  "userConfig": {
-    "client_id": {
-      "title": "Monzo Client ID",
-      "description": "OAuth Client ID from developers.monzo.com",
-      "type": "string",
-      "sensitive": true
-    },
-    "client_secret": {
-      "title": "Monzo Client Secret",
-      "description": "OAuth Client Secret from developers.monzo.com",
-      "type": "string",
-      "sensitive": true
-    }
-  },
   "skills": "./skills/"
 }
