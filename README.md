@@ -32,9 +32,24 @@ Read-only Monzo banking integration for Claude Code. Query balances, view transa
 Go to [developers.monzo.com](https://developers.monzo.com/) and create a **Confidential** client.
 *   **Redirect URL:** `http://localhost:3118/callback`
 
-### 2. Installation Options
+### 2. Installation
 
-#### Option 1: uvx (recommended — no clone needed)
+#### Option A: Claude Code Plugin (recommended)
+
+Gives you the MCP server **plus** domain knowledge skills, auth hooks, and auto-updates.
+
+In a Claude Code session, run:
+```
+/plugin marketplace add tcoretech/monzo-mcp
+/plugin install monzo@tcoretech-monzo-mcp
+/reload-plugins
+/plugin enable monzo
+```
+Then "Configure Options" to set `MONZO_CLIENT_ID` and `MONZO_CLIENT_SECRET` (stored in the system keychain).
+
+#### Option B: Claude Code MCP (server only)
+
+**uvx (no install needed):**
 ```bash
 claude mcp add monzo \
   -e MONZO_CLIENT_ID=your_client_id \
@@ -42,7 +57,7 @@ claude mcp add monzo \
   -- uvx --from monzo-mcp monzo-mcp
 ```
 
-#### Option 2: pip install
+**pip install:**
 ```bash
 pip install monzo-mcp
 claude mcp add monzo \
@@ -51,17 +66,7 @@ claude mcp add monzo \
   -- monzo-mcp
 ```
 
-#### Option 3: Claude Code Plugin (includes skills + auth hooks)
-In a Claude Code session, run:
-```
-/plugin marketplace add tcoretech/monzo-mcp
-/plugin install monzo@tcoretech-monzo-mcp
-```
-This registers the marketplace and installs the plugin, giving you the MCP server **plus** domain knowledge skills and an auth-check hook that runs on session start.
-
-You must have `MONZO_CLIENT_ID` and `MONZO_CLIENT_SECRET` set in your shell environment (e.g. in `~/.bashrc` or `~/.zshrc`).
-
-#### Option 4: Clone & Run from Source
+**From source:**
 ```bash
 git clone https://github.com/tcoretech/monzo-mcp.git
 cd monzo-mcp
@@ -72,17 +77,16 @@ claude mcp add monzo \
   -- python3 mcp-server/server.py
 ```
 
-### 3. Generic MCP Configuration (Desktop/JSON)
-For use with Claude Desktop or other MCP clients, add this to your configuration:
+#### Option C: Any MCP Client (JSON config)
+
+For Claude Desktop, Cursor, or any other MCP-compatible client, add this to your configuration:
 
 ```json
 {
   "mcpServers": {
     "monzo": {
-      "command": "python3",
-      "args": [
-        "/absolute/path/to/monzo-mcp/mcp-server/server.py"
-      ],
+      "command": "uvx",
+      "args": ["--from", "monzo-mcp", "monzo-mcp"],
       "env": {
         "MONZO_CLIENT_ID": "YOUR_CLIENT_ID",
         "MONZO_CLIENT_SECRET": "YOUR_CLIENT_SECRET"
@@ -182,6 +186,7 @@ User provides                 Server handles internally
 
 ## Changelog
 
+- **v1.1.1** — Reorganized installation docs: plugin-first ordering, uvx for generic JSON config
 - **v1.1.0** — Secure token storage: OAuth tokens stored in system keychain (with plaintext fallback), auto-migrates existing tokens
 - **v1.0.9** — Plugin credentials via keychain: `userConfig` prompts at enable time, stores securely in system keychain
 - **v1.0.8** — Seamless plugin onboarding: credentials read from `~/.monzo-mcp/config.json`, interactive setup via SessionStart hook
