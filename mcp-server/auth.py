@@ -27,11 +27,29 @@ import httpx
 
 try:
     import keyring
-    _HAS_KEYRING = True
+    import keyring.errors
+    # Check if a real backend is available (not the fail/null backend)
+    _backend = keyring.get_keyring()
+    _backend_name = type(_backend).__name__
+    if _backend_name in ("Keyring", "NullKeyring", "NoKeyring", "FailKeyring"):
+        _HAS_KEYRING = False
+    else:
+        # Smoke-test: try a round-trip to confirm the backend works
+        try:
+            keyring.set_password("monzo-mcp", "_probe", "1")
+            keyring.delete_password("monzo-mcp", "_probe")
+            _HAS_KEYRING = True
+        except Exception:
+            _HAS_KEYRING = False
 except ImportError:
     _HAS_KEYRING = False
 
 logger = logging.getLogger(__name__)
+
+if _HAS_KEYRING:
+    logger.info("Keyring backend: %s", type(keyring.get_keyring()).__name__)
+else:
+    logger.info("No usable keyring backend — tokens will use plaintext fallback")
 
 MONZO_AUTH_URL = "https://auth.monzo.com/"
 MONZO_TOKEN_URL = "https://api.monzo.com/oauth2/token"
